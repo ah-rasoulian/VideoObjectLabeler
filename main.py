@@ -56,6 +56,8 @@ class GUI(Tk):
         # add main frame
         self.main_frame = Label(self, width=100, height=20)
         self.main_frame.grid(row=1)
+        self.main_frame.bind('<Motion>', self.show_coordinates)
+        self.main_frame.bind('<Button-1>', self.draw_point)
 
         ################################################################################################################
         # add buttons pane
@@ -90,6 +92,13 @@ class GUI(Tk):
         self.status.pack(side=LEFT)
         ################################################################################################################
 
+    def show_coordinates(self, event):
+        self.status.configure(text='x={}, y={}'.format(event.x, event.y))
+
+    def draw_point(self, event):
+        image = cv2.circle(self.frames_list[self.current_frame_index], (event.x, event.y), 3, (0, 0, 255), -1)
+        self.display_image(image)
+
     def on_hover(self, text):
         self.status.configure(text=text)
 
@@ -123,7 +132,11 @@ class GUI(Tk):
         elif self.next_button['state'] == DISABLED:
             self.next_button['state'] = NORMAL
 
-        image = cv2.cvtColor(self.frames_list[self.current_frame_index], cv2.COLOR_BGR2RGB)
+        self.frame_index_scale.set(self.current_frame_index)
+        self.display_image(self.frames_list[self.current_frame_index])
+
+    def display_image(self, image):
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.main_frame.configure(height=image.shape[0], width=image.shape[1])
         self.main_frame_image = ImageTk.PhotoImage(Image.fromarray(image))
         self.main_frame.configure(image=self.main_frame_image)
@@ -142,11 +155,7 @@ class GUI(Tk):
         if len(self.frames_list) > 0:
             self.buttons_frame.grid(row=2)
             self.previous_button['state'] = DISABLED
-
-            image = cv2.cvtColor(self.frames_list[self.current_frame_index], cv2.COLOR_BGR2RGB)
-            self.main_frame.configure(height=image.shape[0], width=image.shape[1])
-            self.main_frame_image = ImageTk.PhotoImage(Image.fromarray(image))
-            self.main_frame.configure(image=self.main_frame_image)
+            self.display_image(self.frames_list[self.current_frame_index])
 
 
 class ThreadedFileReader(threading.Thread):
