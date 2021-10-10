@@ -45,21 +45,28 @@ class GUI(Tk):
         self.add_icon = ImageTk.PhotoImage(Image.open('Icons/add.png'))
         self.add_button = Button(self.toolbar, image=self.add_icon, relief=FLAT, state=DISABLED)
         self.add_button.pack(side=LEFT, padx=2, pady=2)
-        self.add_button.bind('<Enter>', lambda event: self.on_hover('add'))
+        self.add_button.bind('<Enter>', lambda event: self.on_hover('add points'))
         self.add_button.bind('<Leave>', lambda event: self.on_leave())
         self.add_button.bind('<Button-1>', lambda event: self.activate_adding_points())
 
         self.done_icon = ImageTk.PhotoImage(Image.open('Icons/done.jpg'))
         self.done_button = Button(self.toolbar, image=self.done_icon, relief=FLAT, state=DISABLED)
         self.done_button.pack(side=LEFT, padx=2, pady=2)
-        self.done_button.bind('<Enter>', lambda event: self.on_hover('done'))
+        self.done_button.bind('<Enter>', lambda event: self.on_hover('add contour'))
         self.done_button.bind('<Leave>', lambda event: self.on_leave())
         self.done_button.bind('<Button-1>', lambda event: self.create_contour())
+
+        self.remove_icon = ImageTk.PhotoImage(Image.open('Icons/remove.png'))
+        self.remove_button = Button(self.toolbar, image=self.remove_icon, relief=FLAT, state=DISABLED)
+        self.remove_button.pack(side=LEFT, padx=2, pady=2)
+        self.remove_button.bind('<Enter>', lambda event: self.on_hover('remove contour'))
+        self.remove_button.bind('<Leave>', lambda event: self.on_leave())
+        self.remove_button.bind('<Button-1>', lambda event: self.remove_contours())
 
         self.save_icon = ImageTk.PhotoImage(Image.open('Icons/save.jpg'))
         self.save_button = Button(self.toolbar, image=self.save_icon, relief=FLAT, state=DISABLED)
         self.save_button.pack(side=LEFT, padx=2, pady=2)
-        self.save_button.bind('<Enter>', lambda event: self.on_hover('save'))
+        self.save_button.bind('<Enter>', lambda event: self.on_hover('save dataset'))
         self.save_button.bind('<Leave>', lambda event: self.on_leave())
         ################################################################################################################
         # add main frame
@@ -67,6 +74,7 @@ class GUI(Tk):
         self.main_frame.grid(row=1)
         self.main_frame.bind('<Motion>', self.show_coordinates)
         self.main_frame.bind('<Button-1>', self.add_point)
+        self.main_frame.bind('<Button-3>', lambda event: self.remove_points())
 
         ################################################################################################################
         # add buttons pane
@@ -79,7 +87,7 @@ class GUI(Tk):
         self.previous_button.bind('<Leave>', lambda event: self.on_leave())
         self.previous_button.bind('<Button-1>', lambda event: self.change_picture('previous'))
 
-        self.frame_index_scale = Scale(self.buttons_frame, orient=HORIZONTAL, from_=0, to=10)
+        self.frame_index_scale = Scale(self.buttons_frame, orient=HORIZONTAL, from_=0, to=0)
         self.frame_index_scale.set(self.current_frame_index)
         self.frame_index_scale.pack(side=LEFT, padx=2, pady=2)
         self.frame_index_scale.bind('<Motion>', lambda event: self.update_index_frame())
@@ -104,6 +112,15 @@ class GUI(Tk):
     def show_coordinates(self, event):
         self.status.configure(text='x={}, y={}'.format(event.x, event.y))
 
+    def remove_points(self):
+        if self.show_points:
+            self.points[self.current_frame_index] = list()
+            self.display_frame()
+
+    def remove_contours(self):
+        self.contours[self.current_frame_index] = list()
+        self.display_frame()
+
     def add_point(self, event):
         if self.show_points:
             if self.done_button['state'] == DISABLED:
@@ -111,15 +128,25 @@ class GUI(Tk):
             if not self.points.__contains__(self.current_frame_index):
                 self.points[self.current_frame_index] = list()
             self.points.get(self.current_frame_index).append([event.x, event.y])
-            self.display_image(self.frames_list[self.current_frame_index])
+            self.display_frame()
 
     def activate_adding_points(self):
+        if self.add_button['state'] == DISABLED:
+            return
+
         self.show_points = True
+        self.main_frame.config(cursor='target')
+
         self.previous_button['state'] = DISABLED
         self.next_button['state'] = DISABLED
         self.frame_index_scale['state'] = DISABLED
 
     def create_contour(self):
+        if self.done_button['state'] == DISABLED:
+            return
+
+        self.main_frame.config(cursor='arrow')
+
         self.done_button['state'] = DISABLED
         self.previous_button['state'] = NORMAL
         self.next_button['state'] = NORMAL
@@ -131,7 +158,7 @@ class GUI(Tk):
         if not self.contours.__contains__(self.current_frame_index):
             self.contours[self.current_frame_index] = list()
         self.contours.get(self.current_frame_index).append(new_contour)
-        self.display_image(self.frames_list[self.current_frame_index])
+        self.display_frame()
 
     def on_hover(self, text):
         self.status.configure(text=text)
@@ -167,9 +194,9 @@ class GUI(Tk):
             self.next_button['state'] = NORMAL
 
         self.frame_index_scale.set(self.current_frame_index)
-        self.display_image(self.frames_list[self.current_frame_index])
+        self.display_frame()
 
-    def display_image(self, image):
+    def display_frame(self):
         image = self.frames_list[self.current_frame_index].copy()
 
         if self.show_points and self.points.__contains__(self.current_frame_index):
@@ -181,11 +208,14 @@ class GUI(Tk):
             image = cv2.drawContours(image, self.contours.get(self.current_frame_index), -1, (0, 255, 0), 1)
 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        self.main_frame.configure(height=image.shape[0], width=image.shape[1])
         self.main_frame_image = ImageTk.PhotoImage(Image.fromarray(image))
         self.main_frame.configure(image=self.main_frame_image)
 
     def spawn_file_reader_thread(self):
+        if self.thread is not None:
+            self.thread.stop_thread = True
+            self.thread.join()
+
         self.thread = ThreadedFileReader(self.frames_list)
         self.thread.start()
         self.periodic_call()
@@ -198,30 +228,43 @@ class GUI(Tk):
     def display_first_frame(self):
         if len(self.frames_list) > 0:
             self.buttons_frame.grid(row=2)
+            self.main_frame.configure(height=self.frames_list[0].shape[0], width=self.frames_list[0].shape[1],
+                                      bd=0, padx=0, pady=0)
+
             self.previous_button['state'] = DISABLED
             self.add_button['state'] = NORMAL
+            self.remove_button['state'] = NORMAL
             self.save_button['state'] = NORMAL
-            self.display_image(self.frames_list[self.current_frame_index])
+            self.display_frame()
+
+    def close_window(self):
+        if self.thread is not None:
+            self.thread.stop_thread = True
+            self.thread.join()
 
 
 class ThreadedFileReader(threading.Thread):
     def __init__(self, frames):
         threading.Thread.__init__(self)
         self.frames = frames
+        self.stop_thread = False
 
     def run(self):
         file_name = filedialog.askopenfilename(initialdir="/", title="Select a File",
                                                filetypes=[("video files", "*.mp4;*.avi")])
-        cap = cv2.VideoCapture(file_name)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        sample_rate = 1
-        for frame_no in range(0, total_frames, sample_rate):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
-            _, image = cap.read()
-            self.frames.append(image)
-        print(file_name, total_frames)
+        if file_name:
+            cap = cv2.VideoCapture(file_name)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            sample_rate = 1
+            for frame_no in range(0, total_frames, sample_rate):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
+                _, image = cap.read()
+                self.frames.append(image)
+                if self.stop_thread:
+                    break
 
 
 if __name__ == "__main__":
     app = GUI()
     app.mainloop()
+    app.close_window()
