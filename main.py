@@ -1,11 +1,8 @@
 from tkinter import *
 from tkinter import filedialog
 import threading
-import time
 from PIL import Image, ImageTk
 import cv2
-import time
-import numpy as np
 
 
 class GUI(Tk):
@@ -71,6 +68,13 @@ class GUI(Tk):
         self.previous_button.bind('<Leave>', lambda event: self.on_leave())
         self.previous_button.bind('<Button-1>', lambda event: self.change_picture('previous'))
 
+        self.frame_index_scale = Scale(self.buttons_frame, orient=HORIZONTAL, from_=0, to=10)
+        self.frame_index_scale.set(self.current_frame_index)
+        self.frame_index_scale.pack(side=LEFT, padx=2, pady=2)
+        self.frame_index_scale.bind('<Motion>', lambda event: self.update_index_frame())
+        self.frame_index_scale.bind('<Button-1>', lambda event: self.change_picture('scale'))
+        self.frame_index_scale.bind('<ButtonRelease-1>', lambda event: self.change_picture('scale'))
+
         self.next_icon = ImageTk.PhotoImage(Image.open('Icons/next.png'))
         self.next_button = Button(self.buttons_frame, image=self.next_icon, relief=FLAT)
         self.next_button.pack(side=LEFT, padx=2, pady=2)
@@ -89,12 +93,15 @@ class GUI(Tk):
     def on_hover(self, text):
         self.status.configure(text=text)
 
+    def update_index_frame(self):
+        self.frame_index_scale.configure(to=len(self.frames_list) - 1)
+
     def on_leave(self):
         self.status.configure(text='')
 
     def change_picture(self, direction):
         if direction == 'next':
-            if self.current_frame_index < len(self.frames_list):
+            if self.current_frame_index < len(self.frames_list) - 1:
                 self.current_frame_index += 1
             else:
                 return
@@ -103,6 +110,8 @@ class GUI(Tk):
                 self.current_frame_index -= 1
             else:
                 return
+        else:
+            self.current_frame_index = self.frame_index_scale.get()
 
         if self.current_frame_index == 0:
             self.previous_button['state'] = DISABLED
@@ -118,7 +127,6 @@ class GUI(Tk):
         self.main_frame.configure(height=image.shape[0], width=image.shape[1])
         self.main_frame_image = ImageTk.PhotoImage(Image.fromarray(image))
         self.main_frame.configure(image=self.main_frame_image)
-        print(self.current_frame_index)
 
     def spawn_file_reader_thread(self):
         self.thread = ThreadedFileReader(self.frames_list)
