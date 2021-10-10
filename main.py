@@ -3,6 +3,7 @@ from tkinter import filedialog
 import threading
 from PIL import Image, ImageTk
 import cv2
+import numpy as np
 
 
 class GUI(Tk):
@@ -13,6 +14,12 @@ class GUI(Tk):
         self.thread = None
         self.main_frame_image = None
         self.current_frame_index = 0
+        self.points = {}
+        self.contours = {}
+
+        # drawing options
+        self.show_points = False
+        self.show_contours = True
 
         # determine the basic arguments of main window
         self.title('Object Labeler')
@@ -36,19 +43,21 @@ class GUI(Tk):
         self.toolbar.grid(row=0, sticky='w')
 
         self.add_icon = ImageTk.PhotoImage(Image.open('Icons/add.png'))
-        self.add_button = Button(self.toolbar, image=self.add_icon, relief=FLAT)
+        self.add_button = Button(self.toolbar, image=self.add_icon, relief=FLAT, state=DISABLED)
         self.add_button.pack(side=LEFT, padx=2, pady=2)
         self.add_button.bind('<Enter>', lambda event: self.on_hover('add'))
         self.add_button.bind('<Leave>', lambda event: self.on_leave())
+        self.add_button.bind('<Button-1>', lambda event: self.activate_adding_points())
 
         self.done_icon = ImageTk.PhotoImage(Image.open('Icons/done.jpg'))
-        self.done_button = Button(self.toolbar, image=self.done_icon, relief=FLAT)
+        self.done_button = Button(self.toolbar, image=self.done_icon, relief=FLAT, state=DISABLED)
         self.done_button.pack(side=LEFT, padx=2, pady=2)
         self.done_button.bind('<Enter>', lambda event: self.on_hover('done'))
         self.done_button.bind('<Leave>', lambda event: self.on_leave())
+        self.done_button.bind('<Button-1>', lambda event: self.create_contour())
 
         self.save_icon = ImageTk.PhotoImage(Image.open('Icons/save.jpg'))
-        self.save_button = Button(self.toolbar, image=self.save_icon, relief=FLAT)
+        self.save_button = Button(self.toolbar, image=self.save_icon, relief=FLAT, state=DISABLED)
         self.save_button.pack(side=LEFT, padx=2, pady=2)
         self.save_button.bind('<Enter>', lambda event: self.on_hover('save'))
         self.save_button.bind('<Leave>', lambda event: self.on_leave())
@@ -57,7 +66,7 @@ class GUI(Tk):
         self.main_frame = Label(self, width=100, height=20)
         self.main_frame.grid(row=1)
         self.main_frame.bind('<Motion>', self.show_coordinates)
-        self.main_frame.bind('<Button-1>', self.draw_point)
+        self.main_frame.bind('<Button-1>', self.add_point)
 
         ################################################################################################################
         # add buttons pane
@@ -95,9 +104,34 @@ class GUI(Tk):
     def show_coordinates(self, event):
         self.status.configure(text='x={}, y={}'.format(event.x, event.y))
 
-    def draw_point(self, event):
-        image = cv2.circle(self.frames_list[self.current_frame_index], (event.x, event.y), 3, (0, 0, 255), -1)
-        self.display_image(image)
+    def add_point(self, event):
+        if self.show_points:
+            if self.done_button['state'] == DISABLED:
+                self.done_button['state'] = NORMAL
+            if not self.points.__contains__(self.current_frame_index):
+                self.points[self.current_frame_index] = list()
+            self.points.get(self.current_frame_index).append([event.x, event.y])
+            self.display_image(self.frames_list[self.current_frame_index])
+
+    def activate_adding_points(self):
+        self.show_points = True
+        self.previous_button['state'] = DISABLED
+        self.next_button['state'] = DISABLED
+        self.frame_index_scale['state'] = DISABLED
+
+    def create_contour(self):
+        self.done_button['state'] = DISABLED
+        self.previous_button['state'] = NORMAL
+        self.next_button['state'] = NORMAL
+        self.frame_index_scale['state'] = NORMAL
+
+        new_contour = np.array(self.points[self.current_frame_index]).reshape((-1, 1, 2)).astype(np.int32)
+        self.points.pop(self.current_frame_index)
+        self.show_points = False
+        if not self.contours.__contains__(self.current_frame_index):
+            self.contours[self.current_frame_index] = list()
+        self.contours.get(self.current_frame_index).append(new_contour)
+        self.display_image(self.frames_list[self.current_frame_index])
 
     def on_hover(self, text):
         self.status.configure(text=text)
@@ -110,32 +144,42 @@ class GUI(Tk):
 
     def change_picture(self, direction):
         if direction == 'next':
-            if self.current_frame_index < len(self.frames_list) - 1:
+            if self.current_frame_index == len(self.frames_list) - 1 or self.next_button['state'] == DISABLED:
+                return
+            else:
                 self.current_frame_index += 1
-            else:
-                return
         elif direction == 'previous':
-            if self.current_frame_index > 0:
-                self.current_frame_index -= 1
-            else:
+            if self.current_frame_index == 0 or self.previous_button['state'] == DISABLED:
                 return
+            else:
+                self.current_frame_index -= 1
         else:
             self.current_frame_index = self.frame_index_scale.get()
 
         if self.current_frame_index == 0:
             self.previous_button['state'] = DISABLED
-        elif self.previous_button['state'] == DISABLED:
+        elif self.previous_button['state'] == DISABLED and not self.show_points:
             self.previous_button['state'] = NORMAL
 
         if self.current_frame_index == len(self.frames_list) - 1:
             self.next_button['state'] = DISABLED
-        elif self.next_button['state'] == DISABLED:
+        elif self.next_button['state'] == DISABLED and not self.show_points:
             self.next_button['state'] = NORMAL
 
         self.frame_index_scale.set(self.current_frame_index)
         self.display_image(self.frames_list[self.current_frame_index])
 
     def display_image(self, image):
+        image = self.frames_list[self.current_frame_index].copy()
+
+        if self.show_points and self.points.__contains__(self.current_frame_index):
+            points = self.points.get(self.current_frame_index)
+            for point in points:
+                image = cv2.circle(image, tuple(point), 2, (0, 0, 255), -1)
+
+        if self.show_contours:
+            image = cv2.drawContours(image, self.contours.get(self.current_frame_index), -1, (0, 255, 0), 1)
+
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.main_frame.configure(height=image.shape[0], width=image.shape[1])
         self.main_frame_image = ImageTk.PhotoImage(Image.fromarray(image))
@@ -155,6 +199,8 @@ class GUI(Tk):
         if len(self.frames_list) > 0:
             self.buttons_frame.grid(row=2)
             self.previous_button['state'] = DISABLED
+            self.add_button['state'] = NORMAL
+            self.save_button['state'] = NORMAL
             self.display_image(self.frames_list[self.current_frame_index])
 
 
