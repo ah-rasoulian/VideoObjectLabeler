@@ -156,7 +156,7 @@ class GUI(Tk):
         self.next_button['state'] = NORMAL
         self.frame_index_scale['state'] = NORMAL
 
-        new_contour = np.array(self.points[self.current_frame_index]).reshape((-1, 1, 2)).astype(np.int32)
+        new_contour = np.array(self.points[self.current_frame_index]).astype(np.int32)
         self.points.pop(self.current_frame_index)
         self.show_points = False
         if not self.contours.__contains__(self.current_frame_index):
