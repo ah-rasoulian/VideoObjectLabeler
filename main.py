@@ -4,6 +4,7 @@ import threading
 from PIL import Image, ImageTk
 import cv2
 import numpy as np
+import json
 
 
 class GUI(Tk):
@@ -11,7 +12,8 @@ class GUI(Tk):
     def __init__(self):
         Tk.__init__(self)
         self.frames_list = list()
-        self.thread = None
+        self.reading_thread = None
+        self.saving_thread = None
         self.main_frame_image = None
         self.current_frame_index = 0
         self.points = {}
@@ -68,6 +70,7 @@ class GUI(Tk):
         self.save_button.pack(side=LEFT, padx=2, pady=2)
         self.save_button.bind('<Enter>', lambda event: self.on_hover('save dataset'))
         self.save_button.bind('<Leave>', lambda event: self.on_leave())
+        self.save_button.bind('<Button-1>', lambda event: self.spawn_save_dataset_thread())
         ################################################################################################################
         # add main frame
         self.main_frame = Label(self, width=100, height=20)
@@ -115,6 +118,7 @@ class GUI(Tk):
     def remove_points(self):
         if self.show_points:
             self.points[self.current_frame_index] = list()
+            self.show_points = False
             self.display_frame()
 
     def remove_contours(self):
@@ -212,13 +216,17 @@ class GUI(Tk):
         self.main_frame.configure(image=self.main_frame_image)
 
     def spawn_file_reader_thread(self):
-        if self.thread is not None:
-            self.thread.stop_thread = True
-            self.thread.join()
+        if self.reading_thread is not None:
+            self.reading_thread.stop_thread = True
+            self.reading_thread.join()
 
-        self.thread = ThreadedFileReader(self.frames_list)
-        self.thread.start()
+        self.reading_thread = ThreadedFileReader(self.frames_list)
+        self.reading_thread.start()
         self.periodic_call()
+
+    def spawn_save_dataset_thread(self):
+        self.saving_thread = ThreadedSaveDataset(self.frames_list, self.contours)
+        self.saving_thread.start()
 
     def periodic_call(self):
         self.display_first_frame()
@@ -238,9 +246,9 @@ class GUI(Tk):
             self.display_frame()
 
     def close_window(self):
-        if self.thread is not None:
-            self.thread.stop_thread = True
-            self.thread.join()
+        if self.reading_thread is not None:
+            self.reading_thread.stop_thread = True
+            self.reading_thread.join()
 
 
 class ThreadedFileReader(threading.Thread):
@@ -262,6 +270,26 @@ class ThreadedFileReader(threading.Thread):
                 self.frames.append(image)
                 if self.stop_thread:
                     break
+
+
+class ThreadedSaveDataset(threading.Thread):
+    def __init__(self, frames, contours_list):
+        threading.Thread.__init__(self)
+        self.frames = frames
+        self.contours = {}
+        for key, value in contours_list.items():
+            new_value = []
+            for contours in value:
+                new_value.append(contours.tolist())
+            self.contours[key] = new_value
+
+    def run(self):
+        dir_name = filedialog.askdirectory(initialdir="/", title="Select a Directory to store dataset")
+        for frame_index in self.contours.keys():
+            cv2.imwrite('{}/{}.png'.format(dir_name, frame_index), self.frames[frame_index])
+
+        with open('{}/contours.json'.format(dir_name), 'w') as contours_out_file:
+            json.dump(self.contours, contours_out_file, separators=(',', ':'), sort_keys=True, indent=4)
 
 
 if __name__ == "__main__":
